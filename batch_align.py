@@ -3,44 +3,19 @@ import sys
 import subprocess
 import re
 
+import dir_tools
+
 
 def main():
+    paths = dir_tools.get_all_paths(sys.argv)
     number_alignments = 0
-
-    path_str = ""
-
-    try:
-        path_str = sys.argv[1]
-    except IndexError:
-        print("""Please give the path to the run directory as a command line
-               argument.""")
-        sys.exit(0)
-
-    # omitting forward slash at beginning
-    if path_str[0] is "/":
-        path_str = path_str[1:]
-
-    # adding forward slash at end
-    if path_str[-1] is not "/":
-        path_str = path_str + "/"
-
-    # get run name
-    run_name = ""
-    run_re = re.match(r"[\S*\s*]*/([\S*\s*]*)/\Z", path_str)
-
-    if run_re:
-        run_name = run_re.group(1)
-
-    bio = os.getcwd() + "/"
-    root = bio + path_str
-    print("Path set to " + root)
-
-    for dirname in os.listdir(root):
+    for dirname in os.listdir(paths["run_path"]):
 
         # To check it is dir, not file
-        if os.path.isdir(root + dirname):
+        if os.path.isdir(paths["run_path"] + dirname):
             # BaseSpace (Illumina) directory structure
-            temppath = root + dirname + "/Data/Intensities/BaseCalls/"
+            temppath = (paths["run_path"] + dirname +
+                        "/Data/Intensities/BaseCalls/")
 
             # So that alignments are not done twice
             alignment_done = False
@@ -86,19 +61,19 @@ def main():
                                 file2 = filename
 
                     # SAM and BAM files will have prefix of run#_S#
-                    run_sample = run_name + "_" + sample
+                    run_sample = paths["run_name"] + "_" + sample
 
                     if (file1 is not "" and
                             file2 is not "" and
                             run_sample is not ""):
 
                         return_code = subprocess.check_call([
-                                            bio + "batch_align.sh",
+                                            os.cwd() + "/batch_align.sh",
                                             file1,
                                             file2,
                                             run_sample,
                                             temppath,
-                                            bio + "ref/hg38bwaidx"])
+                                            os.cwd() + "/ref/hg38bwaidx"])
 
                         if return_code is 0:
                             number_alignments = number_alignments + 1
