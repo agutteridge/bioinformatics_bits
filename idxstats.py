@@ -1,80 +1,56 @@
 import os
 import sys
 import subprocess
-import re
+
+import dir_tools
 
 
 def main():
-    all_stats = list()
-    root = os.getcwd()
-
-    for dirname in os.listdir(root):
-
+    paths = dir_tools.get_all_paths(sys.argv)
+    for dirname in os.listdir(paths["run_path"]):
+        sample_path = paths["run_path"] + dirname + "/"
         # To check it is dir, not file
-        if os.path.isdir(root + dirname):
-            temppath = root + dirname + "/Data/Intensities/BaseCalls/"
+        if os.path.isdir(sample_path):
+            info = dir_tools.get_sample_info(sample_path)
+            data_path = sample_path + "Data/Intensities/BaseCalls/"
 
-            # Sample number
-            sample = ""
+            if os.path.isdir(data_path):
+                for filename in os.listdir(data_path):
+                    if "_sorted.bam" in filename:
+                        to_write = list()  # to write to .csv file
+                        to_write.append(info["sample_num"])
+                        to_write.append(info["sample_name"])
 
-            both_gz = 0
+                        popen_args = ["samtools",
+                                      "idxstats",
+                                      data_path + filename]
 
-            for filename in os.listdir(temppath):
+                        # different to CollectAlignmentSummaryMetrics per chr ?
+                        p = subprocess.Popen(popen_args, stdout=subprocess.PIPE)
 
-                # assumes no non-run files will have _R1_ or _R2_ !
-                if "_R1_" in filename:
+                        while 1:
+                            row = p.stdout.readline()
+                            row_list = row.decode('UTF-8').split("\t")
+                            if (row_list[1] is not "0"
+                                    or row_list[2] is not "0"):
+                                mapped = row_list[1]
+                                unmapped = row_list[2]
+                                to_write.append(row_list[0])
+                                to_write.append(mapped)
+                                to_write.append(unmapped)
+                                percent = int(mapped) / (int(unmapped) + int(mapped))
+                                to_write.append("{0:.1f}".format(percent * 100))
+                                print("{0:.1f}".format(percent * 100))
+                                sys.exit(0)
+                            if not row and p.returncode is not None:
+                                break
+                            p.poll()
+                        print("done %d" % p.returncode)
 
-                    if sample is "":
-                        # get sample number between S1-96
-                        sample_re = re.match(r"[\S*\s*]*_(S\d*)_[\S*\s*]*", filename)
- 
-                        if sample_re:
-                            sample = sample_re.group(1)                        
+            # Iterate through files, produce idxstats, append to file!
+            # for filename in temppath:
+            #     print("do something")
 
-                    if "fastq.gz" in filename:
-                        subprocess.check_call(["gunzip", temppath + filename])
-                        # removes .gz from strings
-                        file1 = filename[:-3]
-                    else:
-                        file1=filename
-                            
-                elif "_R2_" in filename:
-                    if "fastq.gz" in filename:
-                        subprocess.check_call(["gunzip", temppath + filename])
-                        file2 = filename[:-3]
-                    else:
-                        file2=filename
-
-            # SAM and BAM files will have prefix of run_S#
-            run_sample = run_name + "_" + sample
-
-            if file1 is not "" and file2 is not "" and run_sample is not "":
-                return_code = subprocess.check_call([
-                    bio + "batch_align.sh",
-                    file1, 
-                    file2,
-                    run_sample,
-                    temppath,
-                    bio + "ref/hg38bwaidx"])
-
-                if return_code is 0:
-                    number_alignments = number_alignments + 1
-
-                    with open(os.path.join('./', 'log.txt'), 'a') as datafile:
-                        datafile.write(dirname + "aligned and indexed.\n")
-                        datafile.write("Alignments so far: " + str(number_alignments))
-                        datafile.close()
-
-                else:
-                    problem(dirname)
-
-            else:
-                problem(dirname)
-
-def problem(dirname):
-    with open(os.path.join('./', 'log.txt'), 'a') as datafile:
-        datafile.write("agh! problem in " + dirname + "\n")
-        datafile.close()
 
 if __name__ == "__main__":
     main()
