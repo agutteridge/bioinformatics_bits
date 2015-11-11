@@ -10,24 +10,12 @@ def main():
 
     with open(os.path.join(os.getcwd(), 'idxstats.csv'), 'a') as datafile:
         # Column headers
-        datafile.write("S#" + "\t" +
-                       "Type" + "\t" +
-                       "chr1 (H3F3A), mapped" + "\t" +
-                       "chr1 (H3F3A), unmapped" + "\t" +
-                       "chr15 (IDH2), mapped" + "\t" +
-                       "chr15 (IDH2), unmapped" + "\t" +
-                       "chr2 (IDH1), mapped" + "\t" +
-                       "chr2 (IDH1), unmapped" + "\t" +
-                       "chr3 (CTNNB1), mapped" + "\t" +
-                       "chr3 (CTNNB1), unmapped" + "\t" +
-                       "chr6 (H3.1), mapped" + "\t" +
-                       "chr6 (H3.1), unmapped" + "\t" +
-                       "chr7 (BRAF), mapped" + "\t" +
-                       "chr7 (BRAF), unmapped" + "\t" +
-                       "other, mapped" + "\t" +
-                       "other, unmapped" + "\t" +
-                       "% mapped" + "\t" +
-                       "% mapped and on target" + "\n")
+        datafile.write("S#\tType\tchr1 (H3F3A), mapped\tchr1 (H3F3A), unmapped\t" +
+                       "chr15 (IDH2), mapped\tchr15 (IDH2), unmapped\tchr2 (IDH1), mapped" +
+                       "\tchr2 (IDH1), unmapped\tchr3 (CTNNB1), mapped\t" +
+                       "chr3 (CTNNB1), unmapped\tchr6 (H3.1), mapped\tchr6 (H3.1), unmapped" +
+                       "\tchr7 (BRAF), mapped\tchr7 (BRAF), unmapped\tother, mapped\t" +
+                       "other, unmapped\t% mapped\t% mapped and on target\n")
         datafile.close()
 
     for dirname in os.listdir(paths["run_path"]):
