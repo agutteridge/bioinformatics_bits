@@ -7,6 +7,10 @@ def get_sample_info(sample_path):
     # Sample number
     sample_num = ""
     sample_name = ""
+    # adding forward slash at end
+    if sample_path[-1] is not "/":
+        sample_path = sample_path + "/"
+
     data_path = sample_path + "Data/Intensities/BaseCalls/"
     # get sample number between S1-96
     for filename in os.listdir(data_path):
