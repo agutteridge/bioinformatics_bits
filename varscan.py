@@ -58,7 +58,7 @@ def url_request(chrom, coord, ref, var):
 
 def init_varscan_txt():
     with open(os.path.join(os.getcwd(), "varscan.csv"), 'a') as datafile:
-        datafile.write("S\#\tDownsample\tChr\thg38 Pos\tRef\tVar\tFreq\tProtein change\thg19 Pos\tdbSNP\n")
+        datafile.write("S#\tDownsample\tChr\thg38 Pos\tRef\tVar\tFreq\tProtein change\thg19 Pos\tdbSNP\n")
         datafile.close()
 
 
@@ -74,19 +74,21 @@ def main():
             data_path = (paths["run_path"] + dirname +
                          "/Data/Intensities/BaseCalls/")
 
-            already_done = False
-            # check this hasn't been done already!
-            for filename in os.listdit(data_path):
-                if ".vcf" in filename:
-                    already_done = True
+            info = dir_tools.get_sample_info(paths["run_path"] + dirname)
+            chrom_reads = read_data[info["sample_num"]]
 
-            if not already_done:
-                info = dir_tools.get_sample_info(paths["run_path"] + dirname)
-                chrom_reads = read_data[info["sample_num"]]
+            for chrom in chrom_reads:
+                downsample = 8000 / int(chrom_reads[chrom])
+                prefix = paths["run_name"] + "_" + info["sample_num"]
+                var_info = list()
 
-                for chrom in chrom_reads:
-                    downsample = 8000 / int(chrom_reads[chrom])
-                    prefix = paths["run_name"] + "_" + info["sample_num"]
+                vcf_files = 0
+                # check this hasn't been done already!
+                for filename in os.listdir(data_path):
+                    if ".vcf" in filename:
+                        vcf_files = vcf_files + 1
+
+                if vcf_files is not 6:
                     return_code = subprocess.check_call([
                                         os.getcwd() + "/varscan.sh",
                                         prefix,
@@ -97,58 +99,55 @@ def main():
                     if return_code is 0:
                         print("sample " + info["sample_num"] + " done")
 
-                    var_info = list()
+                with open(os.path.join(data_path, prefix + "_" + chrom + ".vcf"), 'r') as datafile:
+                    datafile.readline()  # discard first line
 
-                    with open(os.path.join(data_path, prefix + "_" + chrom + ".vcf"), 'r') as datafile:
-                        datafile.readline()  # discard first line
+                    for l in datafile:
+                        var_info.append(info["sample_num"])
+                        var_info.append("{0:.2f}".format(downsample))
+                        var_info.append(chrom)
+                        columns = l.split("\t")
+                        var_info += columns[1:4]
+                        hg38_chrom = columns[0]
+                        hg38_coord = int(columns[1])
+                        ref = columns[2]
+                        var = columns[3]
 
-                        for l in datafile:
-                            var_info.append(info["sample_num"])
-                            var_info.append("{0:.2f}".format(downsample))
-                            var_info.append(chrom)
-                            columns = l.split("\t")
-                            var_info += columns[1:4]
-                            hg38_chrom = columns[0]
-                            hg38_coord = int(columns[1])
-                            ref = columns[2]
-                            var = columns[3]
+                        re_freq = re.match(r"[\S*\s*]*:(\d*.*\d*%):[\S*\s*]*", columns[4])
+                        frequency = ""
 
-                            re_freq = re.match(r"[\S*\s*]*:(\d*.*\d*%):[\S*\s*]*", columns[4])
-                            frequency = ""
+                        if re_freq:
+                            frequency = re_freq.group(1)
+                            var_info.append(frequency)
 
-                            if re_freq:
-                                frequency = re_freq.group(1)
-                                var_info.append(frequency)
+                        # zip file in root folder
+                        lo = LiftOver("hg38ToHg19.over.chain.gz")
+                        result = lo.convert_coordinate(hg38_chrom, hg38_coord)
 
-                            # zip file in root folder
-                            lo = LiftOver("hg38ToHg19.over.chain.gz")
-                            result = lo.convert_coordinate(hg38_chrom, hg38_coord)
+                        if result is not None:
+                            coords_list = result[0]
+                            print("hg19: " + coords_list[0] + " " + str(coords_list[1]))
+                            oncodata = url_request(coords_list[0],
+                                                   str(coords_list[1]),
+                                                   ref,
+                                                   var)
+                            var_info.append(oncodata["protein_change"])
+                            var_info.append(oncodata["start"])
+                            var_info.append(oncodata["dbSNP_RS"])
+                            var_info.append("\n")
+                        else:
+                            print("hg19 coordinate not found.")
 
-                            if result is not None:
-                                coords_list = result[0]
-                                print("hg19: " + coords_list[0] + " " + str(coords_list[1]))
-                                oncodata = url_request(coords_list[0],
-                                                       str(coords_list[1]),
-                                                       ref,
-                                                       var)
-                                var_info.append(oncodata["protein_change"])
-                                var_info.append(oncodata["start"])
-                                var_info.append(oncodata["dbSNP_RS"])
-                                var_info.append("\n")
-                            else:
-                                print("hg19 coordinate not found.")
-
-                    with open(os.path.join(os.getcwd(), "varscan.csv"), 'a') as datafile:
-                        length = len(var_info)
-
-                        i = 0
-                        for v in var_info:
-                            if i is length - 1:
+                with open(os.path.join(os.getcwd(), "varscan.csv"), 'a') as datafile:
+                    for v in var_info:
+                        if len(v) > 0:
+                            if v[-1] == "\n":
                                 datafile.write(v)
                             else:
                                 datafile.write(v + "\t")
-                            i += 1
-                        datafile.close()
+                        else:
+                            datafile.write(v + "\t")
+                    datafile.close()
 
 
 if __name__ == "__main__":
