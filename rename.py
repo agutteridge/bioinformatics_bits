@@ -64,48 +64,50 @@ def main():
     for dirname in os.listdir(paths["run_path"]):
         # To check it is dir, not file
         if os.path.isdir(paths["run_path"] + dirname):
-            bcpath = paths["run_path"] + dirname + "/Data/Intensities/BaseCalls/"
-            for filename in os.listdir(bcpath):
-                # Renaming files in directory
-                # get sample number between S1-96
-                num_re = re.match(r"\S*_S(\d+)\S*",
-                                  filename)
+            bcpath = (paths["run_path"] + dirname +
+                      "/Data/Intensities/BaseCalls/")
 
-                if num_re:
-                    old_num = num_re.group(1)
-                    try:
-                        new_num = sample_nums.get(old_num)
-                        new_filename = re.sub(r"_S(\d+)",
-                                              "_S" + str(new_num),
-                                              filename)
-                        if new_filename != filename:
-                            mv_rename(bcpath + filename,
-                                      bcpath + new_filename)
-                    except KeyError:
-                        log(old_num + " not found in dict!")
-                elif (".sam" in filename or
-                      ".bam" in filename or
-                      ".fastq" in filename):
-                    log(filename + " name not changed")
-
-            # Renaming directory
+            # Matching sample name for renaming directory and FastQ files
             # Assumes Illumina numeric ID is at least 8 digits long
             name_re = re.match(r"([\S*\s*]*[A|B])-\d\d\d\d\d\d\d\d+\Z",
                                dirname)
+            old_sample_name = ""
+
+            for filename in os.listdir(bcpath):
+                # Matching sample number between S1-96
+                # for renaming FastQ files
+                num_re = re.match(r"\S*_S(\d+)\S*",
+                                  filename)
+                if name_re:
+                    old_sample_name = name_re.group(1)
+                    old_num = num_re.group(1)
+
+                    new_sample_name = sample_names.get(old_sample_name)
+                    new_num = sample_nums.get(old_num)
+                    new_sample_name = new_sample_name.replace(" ", "_")
+
+                    new_fastq = re.sub(
+                            r"([\S*\s*]*)(_S)(\d+)(_L001_R\d+_001.fastq.gz)\Z",
+                            new_sample_name + r"\g<2>" + str(new_num) +
+                            r"\g<4>",
+                            filename)
+                    if filename != new_fastq:
+                        mv_rename(bcpath + filename,
+                                  bcpath + new_fastq)
+                else:
+                    log(dirname + " name not changed")
 
             if name_re:
                 old_name = name_re.group(1)
-                try:
-                    new_name = sample_names.get(old_name)
-                    new_name = new_name.replace(" ", "_")
-                    new_dirname = re.sub(r"([\S*\s*]*[A|B])(-\d\d\d\d\d\d\d\d+)\Z",
-                                         new_name + r"\g<2>",
-                                         dirname)
-                    if dirname != new_dirname:
-                        mv_rename(paths["run_path"] + dirname,
-                                  paths["run_path"] + new_dirname)
-                except KeyError:
-                    log(old_name + " not found in dict!")
+                new_name = sample_names.get(old_name)
+                new_name = new_name.replace(" ", "_")
+                new_dirname = re.sub(
+                    r"([\S*\s*]*[A|B])(-\d\d\d\d\d\d\d\d+)\Z",
+                    new_name + r"\g<2>",
+                    dirname)
+                if dirname != new_dirname:
+                    mv_rename(paths["run_path"] + dirname,
+                              paths["run_path"] + new_dirname)
             else:
                 log(dirname + " name not changed")
 
