@@ -9,6 +9,7 @@ import dir_tools
 def main():
     paths = dir_tools.get_all_paths(sys.argv)
     number_alignments = 0
+
     for dirname in os.listdir(paths["run_path"]):
 
         # To check it is dir, not file
