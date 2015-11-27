@@ -8,13 +8,15 @@ import dir_tools
 def main():
     paths = dir_tools.get_all_paths(sys.argv)
 
-    with open(os.path.join(os.getcwd(), 'idxstats.csv'), 'a') as datafile:
+    with open(os.path.join(os.getcwd(), 'noclips_idxstats.csv'), 'a') as datafile:
         # Column headers
-        datafile.write("S#\tType\tchr1 (H3F3A), mapped\tchr1 (H3F3A), unmapped\t" +
-                       "chr15 (IDH2), mapped\tchr15 (IDH2), unmapped\tchr2 (IDH1), mapped" +
-                       "\tchr2 (IDH1), unmapped\tchr3 (CTNNB1), mapped\t" +
-                       "chr3 (CTNNB1), unmapped\tchr6 (H3.1), mapped\tchr6 (H3.1), unmapped" +
-                       "\tchr7 (BRAF), mapped\tchr7 (BRAF), unmapped\tother, mapped\t" +
+        datafile.write("S#\tType\tchr1 (H3F3A), mapped\t" +
+                       "chr1 (H3F3A), unmapped\tchr15 (IDH2), mapped\t" +
+                       "chr15 (IDH2), unmapped\tchr2 (IDH1), mapped\t" +
+                       "chr2 (IDH1), unmapped\tchr3 (CTNNB1), mapped\t" +
+                       "chr3 (CTNNB1), unmapped\tchr6 (H3.1), mapped\t" +
+                       "chr6 (H3.1), unmapped\tchr7 (BRAF), mapped\t" +
+                       "chr7 (BRAF), unmapped\tother, mapped\t" +
                        "other, unmapped\t% mapped\t% mapped and on target\n")
         datafile.close()
 
@@ -27,8 +29,8 @@ def main():
 
             if os.path.isdir(data_path):
                 for filename in os.listdir(data_path):
-                    if ("_sorted.bam" in filename and
-                            "_sorted.bam.bai" not in filename):
+                    if ("noclips.bam" in filename and
+                            "noclips.bam.bai" not in filename):
                         to_write = list()  # to write to .csv file
                         to_write.append(info["sample_num"])
                         print(info["sample_num"])
@@ -38,7 +40,8 @@ def main():
                                       "idxstats",
                                       data_path + filename]
 
-                        p = subprocess.Popen(popen_args, stdout=subprocess.PIPE)
+                        p = subprocess.Popen(popen_args,
+                                             stdout=subprocess.PIPE)
 
                         # For calculations
                         total = 0
@@ -55,9 +58,12 @@ def main():
                                 row_list.append(r.strip())
 
                             if len(row_list) > 1:
-                                if (row_list[0] == "chr1" or row_list[0] == "chr15" or
-                                        row_list[0] == "chr2" or row_list[0] == "chr3" or
-                                        row_list[0] == "chr6" or row_list[0] == "chr7"):
+                                if (row_list[0] == "chr1" or
+                                        row_list[0] == "chr15" or
+                                        row_list[0] == "chr2" or
+                                        row_list[0] == "chr3" or
+                                        row_list[0] == "chr6" or
+                                        row_list[0] == "chr7"):
                                     to_write.append(row_list[2])
                                     to_write.append(row_list[3])
                                     total_mapped_on_target += int(row_list[2])
@@ -75,10 +81,13 @@ def main():
                         to_write.append(str(other_mapped))
                         to_write.append(str(other_unmapped))
                         if total is not 0:
-                            to_write.append("{0:.1f}".format(total_mapped / total * 100))
-                            to_write.append("{0:.1f}".format(total_mapped_on_target / total * 100))
+                            to_write.append("{0:.1f}".format(
+                                total_mapped / total * 100))
+                            to_write.append("{0:.1f}".format(
+                                total_mapped_on_target / total * 100))
 
-                        with open(os.path.join(os.getcwd(), 'idxstats.csv'), 'a') as datafile:
+                        with open(os.path.join(os.getcwd(), 'noclips_idxstats.csv'),
+                                  'a') as datafile:
                             for w in to_write:
                                 datafile.write(w + "\t")
 

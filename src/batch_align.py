@@ -81,7 +81,8 @@ def main():
                             log(dirname + " aligned successfully.")
 
                         else:
-                            log("error no. %s: %s, subprocess.check_call." % (str(return_code), sample))
+                            log("error no. %s: %s, subprocess.check_call."
+                                % (str(return_code), sample))
 
                     else:
                         log("unnamed variable in %s\nfile1: %s\nfile2: %s\nfull sample name: %s" %
