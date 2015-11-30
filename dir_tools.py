@@ -3,6 +3,24 @@ import sys
 import re
 
 
+# Produces a string of whitespace-delimited regions from a bed file
+# to use with -r flag in mpileup (-l with bed file is inefficient)
+def read_bed(path_to_bed):
+    all_regions = list()
+
+    with open(path_to_bed, "r") as datafile:
+        for line in datafile:
+            columns = line.strip().split("\t")
+            region = {
+                "full": "%s:%s-%s" % (columns[0], columns[1], columns[2]),
+                "chrom": columns[0]
+            }
+            all_regions.append(region)
+        datafile.close()
+
+    return all_regions
+
+
 def get_sample_info(sample_path):
     # Sample number
     sample_num = ""
@@ -45,14 +63,12 @@ def get_sample_info(sample_path):
             sys.exit(0)
 
 
-def get_run_info(args_list):
-    run_path = ""
+# Tests path to run directory, supplied as a command line argument.
+# Extracts run name to be used as variable.
+def get_run_info(run_path):
     run_name = ""
 
-    # Requires path to run directory to be supplied as a command line argument.
     try:
-        run_path = args_list[1]
-
         if not os.path.isdir(run_path):
             raise OSError("Not a valid path.")
 
