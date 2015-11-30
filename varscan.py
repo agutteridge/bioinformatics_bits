@@ -1,9 +1,14 @@
+###############################################################################
+# Run VarScan2
+# all variants are saved to one output file
+#
+# See parse_those_args for required arguments.
+
 import os
 import urllib
 import json
-import sys
 import subprocess
-import re
+import argparse
 
 from pyliftover import LiftOver
 
@@ -13,33 +18,61 @@ import config
 
 # Global var for caching of Oncotator results
 oncotator_dict = dict()
+# Global var for pyliftover results (it takes a surprisingly long time)
+pyliftover_dict = dict()
 
 
-def url_request(chrom, coord, ref, var):
-    url = ("http://www.broadinstitute.org/oncotator/mutation/" +
-           chrom + "_" +
-           coord + "_" +
-           coord + "_" +
-           ref + "_" +
-           var + "/")
+def get_depth():
+    popen_args = [os.getcwd() + '/coverage.sh',
+                  paths["run_name"],
+                  varscan_columns[1],
+                  varscan_columns[0],
+                  region]
 
-    if url in oncotator_dict:
-        return oncotator_dict[url]
-    else:
+    p = subprocess.Popen(popen_args, stdout=subprocess.PIPE)
+
+    while 1:
+        coverage = p.stdout.readline().decode('UTF-8')
+        varscan_columns.append(coverage.strip())
+        if not coverage and p.returncode is not None:
+            break
+        p.poll()
+
+    all_columns.append('\t'.join(varscan_columns))
+
+
+def pyliftover(hg38_chrom, hg38_coord):
+    hg38_key = "%s:%s" % (hg38_chrom, hg38_coord)
+
+    if hg38_key not in pyliftover_dict:
+        lo = LiftOver(config.input_dir + "hg38ToHg19.over.chain.gz")
+        result = lo.convert_coordinate(hg38_chrom, int(hg38_coord))
+
+        if result is not None:
+            coords_list = result[0]
+
+            pyliftover_dict[hg38_key] = {
+                "chrom": coords_list[0],
+                "coord": str(coords_list[1])
+            }
+
+    return pyliftover_dict[hg38_key]
+
+
+def oncotator(ref, var, hg19_chrom, hg19_coord):
+    url = ("http://www.broadinstitute.org/oncotator/mutation/%s_%s_%s_%s_%s/" %
+           (hg19_chrom, hg19_coord, hg19_coord, ref, var))
+
+    if url not in oncotator_dict:
         try:
-            result = json.loads(
+            oncodata = json.loads(
                 urllib.request
                 .urlopen(url)
                 .read()
-                .decode('UTF-8')
-            )
+                .decode("UTF-8"))
 
-            if "protein_change" in result:
-                oncotator_dict[url] = {
-                    "protein_change": result["protein_change"],
-                    "start": result["start"]
-                }
-                return result
+            if "protein_change" in oncodata:
+                oncotator_dict[url] = oncodata["protein_change"]
             else:
                 raise urllib.error.URLError("Expected JSON not received.")
         except (urllib.error.HTTPError,
@@ -47,139 +80,119 @@ def url_request(chrom, coord, ref, var):
             print(e.reason)
             print(url)
 
-
-def init_varscan_csv():
-    with open(os.path.join(os.getcwd(), "varscan_no_downsampling.csv"),
-              'a') as datafile:
-        datafile.write("S#\tSample name\tChr\thg38 Pos\tdbSNP\t" +
-                       "Ref\tVar\tQuality\tFilter\tInfo\tFormat\tSamples\t" +
-                       "Protein change\thg19 Pos\tFreq\n")
-        datafile.close()
+    return oncotator_dict[url]
 
 
-def read_from_vcf(vcf_filename,
-                  sample_num,
-                  sample_name,
-                  chrom):
-    varscan_data = list()
+def annotate_results(input_data, sample_num, sample_name):
+    final_data = list()
 
-    with open(os.path.join(vcf_filename), 'r') as datafile:
+    for l in input_data:
+        final_data.append(sample_num)  # first column is sample number
+        final_data.append(sample_name)  # second column is sample name
+        columns = l.strip().split("\t")
+        final_data.extend(columns[:6])  # direct from VCF
+        extra_info = columns[9].strip().split(":")
+        final_data.extend(extra_info)
 
-        for l in datafile:
-            if l[0] != "#" and l != "":  # VCFv4.1 comments and column header
-                varscan_data.append(sample_num)
-                varscan_data.append(sample_name)
-                columns = l.strip().split("\t")
-                varscan_data.append(columns[0])
-                varscan_data.extend(columns[1:])
-                hg38_chrom = columns[0]
-                hg38_coord = int(columns[1])
-                ref = columns[3]
-                var = columns[4]
+        ref = columns[3]
+        var = columns[4]
 
-                varscan_data.extend(
-                    liftover_oncotator(
-                        ref,
-                        var,
-                        hg38_chrom,
-                        hg38_coord))
+        hg19 = pyliftover(columns[0], columns[1])
+        protein_change = oncotator(ref, var, hg19["chrom"], hg19["coord"])
 
-                re_freq = re.match(r"[\S*\s*]*:(\d*.*\d*%):[\S*\s*]*",
-                                   columns[9])
-                if re_freq:
-                    frequency = re_freq.group(1)
-                    varscan_data.append(frequency)
+        final_data.append(protein_change)
+        final_data.append(hg19["coord"])
+        final_data.append("\n")
 
-                varscan_data.append("\n")
-
-    return varscan_data
+    return final_data
 
 
-def liftover_oncotator(ref, var, hg38_chrom, hg38_coord):
-    results = list()
-    # zip file in root folder
-    lo = LiftOver("hg38ToHg19.over.chain.gz")
-    result = lo.convert_coordinate(hg38_chrom, hg38_coord)
-
-    if result is not None:
-        coords_list = result[0]
-        print("hg19: " + coords_list[0] + " " +
-              str(coords_list[1]))
-        oncodata = url_request(coords_list[0],
-                               str(coords_list[1]),
-                               ref,
-                               var)
-
-        if oncodata["protein_change"] is not None:
-            results.append(oncodata["protein_change"])
-        else:
-            results.append("\t")
-
-        results.append(oncodata["start"])
-    else:
-        results.append("hg19 coordinate not found.")
-
-    return results
-
-
-# Returns True if *chrN.vcf exists already
-def check_vcf(data_path, chrom):
-    for filename in os.listdir(data_path):
-        if (chrom + "_nd.vcf") in filename:
-            return True
-
-    return False
-
-
-def write_to_csv(data_path, var_info):
-    with open(os.path.join(os.getcwd(), "varscan_no_downsampling.csv"),
-              'a') as datafile:
-        for v in var_info:
-            if len(v) > 0:
-                if v[-1] == "\n":
-                    datafile.write(v)
-                else:
-                    datafile.write(v + "\t")
+def write_to_file(output_filename, data):
+    with open(os.path.join(config.output_dir, output_filename),
+              "a") as datafile:
+        for v in data:
+            if v[-1] == "\n":
+                datafile.write(v)
             else:
                 datafile.write(v + "\t")
         datafile.close()
 
 
-def main():
-    init_varscan_csv()
-    run = dir_tools.get_run_info(sys.argv)
+def run_varscan(prefix, data_path, region, chrom):
+    varscan_args = [config.scripts_dir + "varscan.sh",
+                    prefix,
+                    data_path,
+                    region,
+                    "_" + chrom]
 
+    p = subprocess.Popen(varscan_args, stdout=subprocess.PIPE)
+    row_list = list()
+
+    while 1:
+        row = p.stdout.readline().decode("UTF-8")
+
+        if not row and p.returncode is not None:
+            break
+        elif row:
+            if row[0] != "#":  # VCFv4.1 comments and column header
+                row_list.append(row.strip())
+
+        p.poll()
+
+    print("done %d" % p.returncode)
+
+    return row_list
+
+
+def execute(run, bedfile, output_filename):
     for dirname in os.listdir(run["path"]):
         # To check it is dir, not file
         if os.path.isdir(run["path"] + dirname):
             # BaseSpace (Illumina) directory structure
             data_path = (run["path"] + dirname +
                          "/Data/Intensities/BaseCalls/")
-
             sample = dir_tools.get_sample_info(run["path"] + dirname)
-
             prefix = run["name"] + "_" + sample["num"]
+            regions = dir_tools.read_bed(bedfile)
 
-            # if not check_vcf(data_path, chrom):
-            return_code = subprocess.check_call([
-                                os.getcwd() + "/bash/varscan.sh",
-                                prefix,
-                                data_path,
-                                config.input_dir])
+            for r in regions:
+                varscan_results = run_varscan(
+                    prefix,
+                    data_path,
+                    r["full"],
+                    r["chrom"])
 
-            if return_code is not 0:
-                raise Exception("Error in varscan.sh")
-                sys.exit(0)
+                annotated = annotate_results(varscan_results,
+                                             sample["num"],
+                                             sample["name"])
+                write_to_file(output_filename, annotated)
 
-            vcf_results = read_from_vcf(data_path +
-                                        prefix +
-                                        "_nd.vcf",
-                                        sample["num"],
-                                        sample["name"])
 
-            if vcf_results:
-                write_to_csv(data_path, vcf_results)
+# Copies column headers to new file
+def init_output(output_filename):
+    return_code = subprocess.check_call([
+        "cp",
+        config.input_dir + "varscan_template.txt",
+        config.output_dir + output_filename])
 
+    if return_code is not 0:
+        print("Varscan results file not initialised.")
+
+
+def main(shell_args):
+    run = dir_tools.get_run_info(shell_args.run_path)
+    init_output(shell_args.output_filename)
+    execute(run, shell_args.input_bed, shell_args.output_filename)
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Run VarScan2 using bam files for each sample.")
+    parser.add_argument("--run_path", "-rp", type=str, required=True,
+                        help="Path to the run directory")
+    parser.add_argument("--output_filename", "-o", type=str, required=True,
+                        help="Name of the output file.")
+    parser.add_argument("--input_bed", "-ib", type=str, required=True,
+                        help="Path to the input bed file")
+
+    args = parser.parse_args()
+    main(args)
