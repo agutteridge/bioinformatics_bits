@@ -22,25 +22,6 @@ oncotator_dict = dict()
 pyliftover_dict = dict()
 
 
-def get_depth():
-    popen_args = [os.getcwd() + '/coverage.sh',
-                  paths["run_name"],
-                  varscan_columns[1],
-                  varscan_columns[0],
-                  region]
-
-    p = subprocess.Popen(popen_args, stdout=subprocess.PIPE)
-
-    while 1:
-        coverage = p.stdout.readline().decode('UTF-8')
-        varscan_columns.append(coverage.strip())
-        if not coverage and p.returncode is not None:
-            break
-        p.poll()
-
-    all_columns.append('\t'.join(varscan_columns))
-
-
 def pyliftover(hg38_chrom, hg38_coord):
     hg38_key = "%s:%s" % (hg38_chrom, hg38_coord)
 
@@ -83,7 +64,11 @@ def oncotator(ref, var, hg19_chrom, hg19_coord):
     return oncotator_dict[url]
 
 
-def annotate_results(input_data, sample_num, sample_name):
+def annotate_results(input_data,
+                     output_filename,
+                     sample_num,
+                     sample_name,
+                     whole_path):
     final_data = list()
 
     for l in input_data:
@@ -104,17 +89,18 @@ def annotate_results(input_data, sample_num, sample_name):
         final_data.append(hg19["coord"])
         final_data.append("\n")
 
-    return final_data
+    write_to_file(output_filename, final_data)
 
 
 def write_to_file(output_filename, data):
     with open(os.path.join(config.output_dir, output_filename),
               "a") as datafile:
         for v in data:
-            if v[-1] == "\n":
-                datafile.write(v)
-            else:
-                datafile.write(v + "\t")
+            if v:
+                if v[-1] == "\n":
+                    datafile.write(v)
+                else:
+                    datafile.write(v + "\t")
         datafile.close()
 
 
@@ -162,10 +148,11 @@ def execute(run, bedfile, output_filename):
                     r["full"],
                     r["chrom"])
 
-                annotated = annotate_results(varscan_results,
-                                             sample["num"],
-                                             sample["name"])
-                write_to_file(output_filename, annotated)
+                annotate_results(varscan_results,
+                                 output_filename,
+                                 sample["num"],
+                                 sample["name"],
+                                 data_path + prefix)
 
 
 # Copies column headers to new file
@@ -183,6 +170,7 @@ def main(shell_args):
     run = dir_tools.get_run_info(shell_args.run_path)
     init_output(shell_args.output_filename)
     execute(run, shell_args.input_bed, shell_args.output_filename)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
