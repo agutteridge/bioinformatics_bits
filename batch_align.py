@@ -7,15 +7,15 @@ import dir_tools
 
 
 def main():
-    paths = dir_tools.get_all_paths(sys.argv)
+    run = dir_tools.get_run_info(sys.argv[1])
     number_alignments = 0
 
-    for dirname in os.listdir(paths["run_path"]):
+    for dirname in os.listdir(run["path"]):
 
         # To check it is dir, not file
-        if os.path.isdir(paths["run_path"] + dirname):
+        if os.path.isdir(run["path"] + dirname):
             # BaseSpace (Illumina) directory structure
-            data_path = (paths["run_path"] + dirname +
+            data_path = (run["path"] + dirname +
                          "/Data/Intensities/BaseCalls/")
 
             # So that alignments are not done twice
@@ -64,18 +64,18 @@ def main():
                                 file2 = filename
 
                     # SAM and BAM files will have prefix of run#_S#
-                    run_sample = paths["run_name"] + "_" + sample
+                    run_sample = run["name"] + "_" + sample
 
                     if (file1 is not "" and
                             file2 is not "" and
                             run_sample is not ""):
 
                         return_code = subprocess.check_call([
-                                            os.getcwd() + "/batch_align.sh",
-                                            file1,
-                                            file2,
-                                            run_sample,
-                                            data_path])
+                                        os.getcwd() + "/shell/batch_align.sh",
+                                        file1,
+                                        file2,
+                                        run_sample,
+                                        data_path])
 
                         if return_code is 0:
                             number_alignments = number_alignments + 1
@@ -98,7 +98,8 @@ def main():
 
 
 def log(message):
-    with open(os.path.join(os.getcwd(), 'batch_align_log.txt'), 'a') as datafile:
+    with open(os.path.join(os.getcwd(), 'batch_align_log.txt'),
+              'a') as datafile:
         datafile.write(message + "\n")
         datafile.close()
 
