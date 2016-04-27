@@ -1,9 +1,7 @@
 ###############################################################################
-# Run VarScan2
-# all variants are saved to one output file
-#
-# See parse_those_args for required arguments.
-
+# Calls shell script with VarScan2 and Samtools mpileup
+# Variants are annotated (requires connection to internet) and written to file
+###############################################################################
 import os
 import urllib
 import json
@@ -53,7 +51,10 @@ def oncotator(ref, var, hg19_chrom, hg19_coord):
                 .decode("UTF-8"))
 
             if "protein_change" in oncodata:
-                oncotator_dict[url] = oncodata["protein_change"]
+                if oncodata["protein_change"] is "":
+                    oncotator_dict[url] = "n/a"
+                else:
+                    oncotator_dict[url] = oncodata["protein_change"]
             else:
                 raise urllib.error.URLError("Expected JSON not received.")
         except (urllib.error.HTTPError,
@@ -104,12 +105,10 @@ def write_to_file(output_filename, data):
         datafile.close()
 
 
-def run_varscan(prefix, data_path, region, chrom):
+def run_varscan(prefix, data_path):
     varscan_args = [config.scripts_dir + "varscan.sh",
                     prefix,
-                    data_path,
-                    region,
-                    "_" + chrom]
+                    data_path]
 
     p = subprocess.Popen(varscan_args, stdout=subprocess.PIPE)
     row_list = list()
@@ -130,7 +129,7 @@ def run_varscan(prefix, data_path, region, chrom):
     return row_list
 
 
-def execute(run, bedfile, output_filename):
+def execute(run, output_filename):
     for dirname in os.listdir(run["path"]):
         # To check it is dir, not file
         if os.path.isdir(run["path"] + dirname):
@@ -139,15 +138,12 @@ def execute(run, bedfile, output_filename):
                          "/Data/Intensities/BaseCalls/")
             sample = dir_tools.get_sample_info(run["path"] + dirname)
             prefix = run["name"] + "_" + sample["num"]
-            regions = dir_tools.read_bed(bedfile)
 
-            for r in regions:
-                varscan_results = run_varscan(
-                    prefix,
-                    data_path,
-                    r["full"],
-                    r["chrom"])
+            varscan_results = run_varscan(
+                prefix,
+                data_path)
 
+            if varscan_results != "no reads.":
                 annotate_results(varscan_results,
                                  output_filename,
                                  sample["num"],
@@ -157,19 +153,18 @@ def execute(run, bedfile, output_filename):
 
 # Copies column headers to new file
 def init_output(output_filename):
-    return_code = subprocess.check_call([
-        "cp",
-        config.input_dir + "varscan_template.txt",
-        config.output_dir + output_filename])
+    inf = config.input_dir + "varscan_template.txt"
+    outf = config.output_dir + output_filename
 
-    if return_code is not 0:
-        print("Varscan results file not initialised.")
+    with open(inf, mode="r") as template, open(outf, mode="a") as output:
+        for line in template:
+            output.write(line)
 
 
 def main(shell_args):
     run = dir_tools.get_run_info(shell_args.run_path)
     init_output(shell_args.output_filename)
-    execute(run, shell_args.input_bed, shell_args.output_filename)
+    execute(run, shell_args.output_filename)
 
 
 if __name__ == "__main__":
@@ -179,8 +174,6 @@ if __name__ == "__main__":
                         help="Path to the run directory")
     parser.add_argument("--output_filename", "-o", type=str, required=True,
                         help="Name of the output file.")
-    parser.add_argument("--input_bed", "-ib", type=str, required=True,
-                        help="Path to the input bed file")
 
     args = parser.parse_args()
     main(args)
