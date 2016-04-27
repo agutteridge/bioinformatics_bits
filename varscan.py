@@ -7,6 +7,7 @@ import urllib
 import json
 import subprocess
 import argparse
+import socket
 
 from pyliftover import LiftOver
 
@@ -18,6 +19,16 @@ import config
 oncotator_dict = dict()
 # Global var for pyliftover results (it takes a surprisingly long time)
 pyliftover_dict = dict()
+
+
+# Returns true if a connection to the internet is present
+def is_connected():
+    try:
+        host = socket.gethostbyname("www.google.com")
+        socket.create_connection((host, 80), 2)
+        return True
+    except:
+        return False
 
 
 def pyliftover(hg38_chrom, hg38_coord):
@@ -83,11 +94,14 @@ def annotate_results(input_data,
         ref = columns[3]
         var = columns[4]
 
-        hg19 = pyliftover(columns[0], columns[1])
-        protein_change = oncotator(ref, var, hg19["chrom"], hg19["coord"])
+        if is_connected():
+            hg19 = pyliftover(columns[0], columns[1])
+            protein_change = oncotator(ref, var, hg19["chrom"], hg19["coord"])
+            final_data.append(protein_change)
+            final_data.append(hg19["coord"])
+        else:
+            final_data.append("offline mode")
 
-        final_data.append(protein_change)
-        final_data.append(hg19["coord"])
         final_data.append("\n")
 
     write_to_file(output_filename, final_data)
