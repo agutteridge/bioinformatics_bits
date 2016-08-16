@@ -3,77 +3,12 @@
 # Variants are annotated (requires connection to internet) and written to file
 ###############################################################################
 import os
-import urllib
-import json
 import subprocess
 import argparse
-import socket
-
-from pyliftover import LiftOver
 
 import dir_tools
 import config
-
-
-# Global var for caching of Oncotator results
-oncotator_dict = dict()
-# Global var for pyliftover results (it takes a surprisingly long time)
-pyliftover_dict = dict()
-
-
-# Returns true if a connection to the internet is present
-def is_connected():
-    try:
-        host = socket.gethostbyname("www.google.com")
-        socket.create_connection((host, 80), 2)
-        return True
-    except:
-        return False
-
-
-def pyliftover(hg38_chrom, hg38_coord):
-    hg38_key = "%s:%s" % (hg38_chrom, hg38_coord)
-
-    if hg38_key not in pyliftover_dict:
-        lo = LiftOver(config.input_dir + "hg38ToHg19.over.chain.gz")
-        result = lo.convert_coordinate(hg38_chrom, int(hg38_coord))
-
-        if result is not None:
-            coords_list = result[0]
-
-            pyliftover_dict[hg38_key] = {
-                "chrom": coords_list[0],
-                "coord": str(coords_list[1])
-            }
-
-    return pyliftover_dict[hg38_key]
-
-
-def oncotator(ref, var, hg19_chrom, hg19_coord):
-    url = ("http://www.broadinstitute.org/oncotator/mutation/%s_%s_%s_%s_%s/" %
-           (hg19_chrom, hg19_coord, hg19_coord, ref, var))
-
-    if url not in oncotator_dict:
-        try:
-            oncodata = json.loads(
-                urllib.request
-                .urlopen(url)
-                .read()
-                .decode("UTF-8"))
-
-            if "protein_change" in oncodata:
-                if oncodata["protein_change"] is "":
-                    oncotator_dict[url] = "n/a"
-                else:
-                    oncotator_dict[url] = oncodata["protein_change"]
-            else:
-                raise urllib.error.URLError("Expected JSON not received.")
-        except (urllib.error.HTTPError,
-                urllib.error.URLError) as e:
-            print(e.reason)
-            print(url)
-
-    return oncotator_dict[url]
+import annotate
 
 
 def annotate_results(input_data,
@@ -94,14 +29,8 @@ def annotate_results(input_data,
         ref = columns[3]
         var = columns[4]
 
-        if is_connected():
-            hg19 = pyliftover(columns[0], columns[1])
-            protein_change = oncotator(ref, var, hg19["chrom"], hg19["coord"])
-            final_data.append(protein_change)
-            final_data.append(hg19["coord"])
-        else:
-            final_data.append("offline mode")
-
+        # protein change
+        final_data.append(annotate.run(ref, var, columns[0], columns[1]))
         final_data.append("\n")
 
     write_to_file(output_filename, final_data)
@@ -187,7 +116,7 @@ if __name__ == "__main__":
     parser.add_argument("--run_path", "-rp", type=str, required=True,
                         help="Path to the run directory")
     parser.add_argument("--output_filename", "-o", type=str, required=True,
-                        help="Name of the output file.")
+                        help="Name of the output file (incl extension)")
 
     args = parser.parse_args()
     main(args)

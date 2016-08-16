@@ -2,8 +2,8 @@ import os
 import sys
 import subprocess
 import re
-
 import dir_tools
+import config
 
 
 def main():
@@ -98,7 +98,7 @@ def main():
 
 
 def log(message):
-    with open(os.path.join(os.getcwd(), 'batch_align_log.txt'),
+    with open(os.path.join(config.output_dir, 'batch_align_log.txt'),
               'a') as datafile:
         datafile.write(message + "\n")
         datafile.close()
